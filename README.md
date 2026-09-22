@@ -50,6 +50,10 @@ The root directory is ready for a static host. All runtime asset paths are
 relative, so the page can also be served under a project subdirectory.
 `.nojekyll` is included for hosts that support it.
 
-Repository visibility and website visibility are separate decisions. No public
-deployment is configured in this initial version. The existing `noindex` tag
-is retained; it is not an access-control mechanism.
+The repository is public. GitHub Pages publishes the root of the `main` branch:
+
+https://yubo-shankui.github.io/dae/
+
+Push reviewed changes to `main` to update the website. The existing `noindex`
+tag is retained; it is not an access-control mechanism. All files in this
+repository, including the videos, are publicly accessible.
