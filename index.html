@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Accelerating Video Diffusion with a Diffusion Autoencoder</title>
+<link rel="stylesheet" href="assets/css/main.css">
+</head>
+<body>
+<nav class="toc" id="toc">
+  <a href="#motivation">Motivation</a>
+  <a href="#problem">The problem</a>
+  <a href="#idea">Key idea</a>
+  <a href="#method">Method</a>
+  <a class="sub" href="#stage1">Stage 1 · init</a>
+  <a class="sub" href="#stage2">Stage 2 · off-policy</a>
+  <a class="sub" href="#stage3">Stage 3 · on-policy</a>
+  <a href="#experiments">Experiments</a>
+  <a class="sub" href="#exp-pred">Prediction target</a>
+  <a class="sub" href="#exp-data">Data efficiency</a>
+  <a class="sub" href="#exp-setup">Setup</a>
+  <a class="sub" href="#exp-efficiency">Efficiency</a>
+  <a class="sub" href="#exp-exposure">Exposure bias</a>
+  <a class="sub" href="#cases">Video comparisons</a>
+  <a href="#next">Next steps</a>
+</nav>
+<article>
+
+<header class="hero">
+  <div class="topbar"><a href="#">← project page</a><div class="actions"><a class="action" href="#cases">videos</a><a class="action" href="#method">method</a><a class="action" href="#next">next steps</a></div></div>
+  <h1>Diffusion Autoencoding for Fast Video Sampling</h1>
+  <p class="subtitle">A compact post-training recipe: generate only to an intermediate noisy latent, then let the frozen base model decode the details.</p>
+  <p class="statline"><b>~1.7&times;</b> end-to-end speedup &middot; <b>~5&times;</b> faster high-noise steps</p>
+</header>
+
+<h2 id="motivation">Motivation<a class="anchor" href="#motivation">[#]</a></h2>
+<p>Video diffusion sampling pays a per-step cost proportional to the token count. Existing token-reduction routes fall into two camps. One trains a higher-compression VAE <a href="#ref-dcae">[1]</a>, but this creates a new latent space that is hard to adapt to an existing pretrained model, and it uses the same token budget for every noise level. The other notices the coarse-to-fine nature of denoising and spends fewer tokens only at high noise, but usually by introducing a hand-designed coarse space &mdash; spatial/temporal downsampling or a semantic encoder <a href="#ref-pyramidal">[2]</a><a href="#ref-latent-forcing">[3]</a>.</p>
+<p>Those coarse spaces add extra training machinery, and can become the new ceiling on model capacity. This project takes a simpler view: a well-trained diffusion model has already learned a model-native level-of-detail (LOD) representation, where details are added progressively from high noise to low noise. <b>Can we generate only to an intermediate LOD state with fewer tokens, and let the frozen base model finish the details?</b></p>
+
+<h2 id="problem">The problem: hard cutoffs<a class="anchor" href="#problem">[#]</a></h2>
+<p>Diffusion denoising is not an arbitrary sequence of refinements. As Sander Dieleman illustrates in <a href="https://sander.ai/2024/09/02/spectral-autoregression.html">“Diffusion is spectral autoregression”</a>, adding Gaussian noise is like raising a waterline over the frequency spectrum: high-frequency details disappear first, while low-frequency structure remains visible longer. Running the process backward, diffusion models recover structure first and details later.</p>
+<figure>
+  <img class="figure-img" src="assets/sander_rising_tide.gif" alt="Rising-tide spectral view of diffusion noising">
+  <figcaption>Noise acts like a rising waterline over the spectrum: high frequencies disappear first. Visualization by Sander Dieleman, “Diffusion is spectral autoregression” (2024).</figcaption>
+</figure>
+<p>This gives every noise level a natural level-of-detail (LOD) interpretation. Prior multi-scale methods often implement this LOD by hand — by downsampling in pixel/latent space. <b>This is equivalent to using a low-pass filter to define the boundary between two stages.</b></p>
+<figure>
+  <img class="figure-img" src="assets/lowpass_split.svg" alt="A hand-crafted low-pass split used by multi-scale diffusion methods">
+  <figcaption>A hand-crafted downsampling ratio defines a hard spectral cutoff.</figcaption>
+</figure>
+<p>A fixed resolution switch (e.g., 320p → 480p) turns the spectral-autoregression intuition into a hard, global cutoff. But this view is only an approximation: <b>the base model’s actual intermediate representation does not have to align with a hand-crafted frequency boundary.</b></p>
+<figure>
+  <img class="figure-img" src="assets/flow_detour_gpt.png" alt="Flow-matching view of a hand-crafted low-resolution detour">
+  <figcaption>From a flow-matching view, a low-resolution intermediate target turns the original noise-to-high-resolution transport into a detour through a hand-crafted data distribution.</figcaption>
+</figure>
+<p>We saw this mismatch in our own early prototype of a low-resolution-to-high-resolution two-stage pipeline. For samples where the face occupies only a small region, the low-resolution stage can under-resolve mouth motion and choose the wrong movement. In the case below, the high-resolution refiner inherits that motion instead of rewriting it.</p>
+<figure>
+  <video class="figure-img video-compact" src="videos/upsample_case/upsample_case1.mp4" muted loop playsinline controls preload="metadata"></video>
+  <figcaption>A low-resolution motion error inherited by the high-resolution refiner.</figcaption>
+</figure>
+<h2 id="idea">Key idea: the model already has an LOD representation<a class="anchor" href="#idea">[#]</a></h2>
+<p>Our view is simpler: a pretrained diffusion model already carries a model-native LOD representation &mdash; as noise decreases, its latent trajectory progressively adds detail. We access this representation by treating the frozen base model as a <b>diffusion autoencoder (DAE)</b>:</p>
+<ul>
+  <li><b>Encode</b>: forward-noise a clean latent to an intermediate level <code>j</code> &rarr; z<sub>j</sub>, the model's own coarse code;</li>
+  <li><b>Decode</b>: integrate the model's ODE from <code>j</code> back to 0 &mdash; the round trip loses little perceptual quality, for any chosen <code>j</code>.</li>
+</ul>
+<p>A generator is therefore <em>done</em> once it produces a valid z<sub>j</sub>. The frozen base model finishes the details, in its own latent space, with no resampler.</p>
+<figure>
+  <img class="figure-img" src="assets/dae_pipeline_gpt_v5_crop.png" alt="Diffusion autoencoder view and two-phase sampling pipeline">
+  <figcaption>Left: the frozen base model as an autoencoder over its own noisy latents. Right: two-phase sampling &mdash; a 1/4-token coarse model covers t&nbsp;&gt;&nbsp;j, then hands the latent to the base model unchanged.</figcaption>
+</figure>
+<p>We started with the simplest possible approach: use the base model itself as a training-free encode&ndash;decode system. Forward-noise a real video latent to z<sub>j</sub>, then let the frozen base model denoise it back. Visually, the reconstruction is almost lossless.</p>
+<div class="case-row two recon-row">
+  <div class="cell"><span class="label">DAE recon 1</span><video src="videos/DAE_Recon/DAE_Recon1.mp4" muted loop playsinline controls preload="metadata"></video></div>
+  <div class="cell"><span class="label">DAE recon 2</span><video src="videos/DAE_Recon/DAE_Recon2.mp4" muted loop playsinline controls preload="metadata"></video></div>
+</div>
+<figcaption>DAE reconstruction with j=750 on a 30-step denoising schedule (shift=3.0).</figcaption>
+
+<h2 id="method">Method: a three-stage post-training recipe<a class="anchor" href="#method">[#]</a></h2>
+<p>The coarse model is the same DiT with one change: patchify/unpatchify use a 2&times;-larger spatial patch, so the high-noise phase runs with 1/4 of the tokens. Latent space, conditioning, and sampler stay unchanged.</p>
+<p><b>The objective.</b> A z<sub>j</sub> is &ldquo;valid&rdquo; when the coarse model's marginal at level <code>j</code> matches the base model's own marginal there &mdash; the frozen decoder then never leaves its familiar territory. Since both sides start from the same Gaussian z<sub>T</sub>, this reduces to one thing: <b>align the two velocity fields on t&nbsp;&isin;&nbsp;[j,&nbsp;T]</b>. Matching velocities everywhere transports the same z<sub>T</sub> distribution to the same z<sub>j</sub> distribution; equivalently, given the flow-matching field on each side, matching the z<sub>j</sub> marginal <em>is</em> matching those two fields over the region. The loss is therefore just per-step regression onto the frozen teacher's velocity on the high-noise interval.</p>
+<h3 id="stage1">Stage 1 &mdash; training-free initialization</h3>
+<p>The goal is a strong starting point that reuses the base model as much as possible. Transformer weights are copied verbatim; only the patch-size-dependent patchify/unpatchify layers cannot be reused directly, so we tile and rescale them &mdash; unpatchify is tiled so the initial output is a nearest-neighbour upsample of the base prediction. The coarse model starts as the base model looking at a blurrier picture.</p>
+<figure>
+  <img class="figure-img" src="assets/stage1_init.svg" alt="Stage 1 training-free initialization diagram">
+  <figcaption>Stage 1 changes only the patch-size-dependent layers; the transformer backbone is copied verbatim.</figcaption>
+</figure>
+<h3 id="stage2">Stage 2 &mdash; off-policy trajectory distillation</h3>
+<p>Noise real data to t&nbsp;&gt;&nbsp;j, run the frozen base model once, and regress the coarse model onto the teacher velocity. The coarse model predicts the clean latent, then converts it to velocity; this is much easier than direct velocity prediction at large patch sizes.</p>
+<figure>
+  <img class="figure-img" src="assets/stage2_distill.svg" alt="Stage 2 off-policy trajectory distillation diagram">
+  <figcaption>Stage 2 is pointwise teacher regression on data-noised latents (off-policy): no CFG target, no DMD, no rollout.</figcaption>
+</figure>
+<p>Why not simply retrain with flow matching? Because the base model already encodes a high-quality solution trajectory. Regression copies that answer directly, with a deterministic low-variance target.</p>
+<h3 id="stage3">Stage 3 &mdash; on-policy trajectory distillation</h3>
+<p>Same pointwise loss, but the latents no longer come from noised real data. Starting from Gaussian z<sub>T</sub>, the coarse model rolls itself out step by step &mdash; z<sub>T-1</sub>, z<sub>T-2</sub>, &hellip;, z<sub>j+1</sub> &mdash; and each on-policy point is regressed onto the frozen teacher's velocity. This aligns the distillation with the trajectory the coarse model actually follows at inference, rather than the data-noised trajectory it never visits.</p>
+
+<h2 id="experiments">Experiments<a class="anchor" href="#experiments">[#]</a></h2>
+
+<h3 id="exp-pred">Prediction target: x-pred vs. v-pred</h3>
+<p>The coarse model regresses the clean latent (x-prediction) rather than the velocity (v-prediction). This choice is not cosmetic at large patches. With a 4&times;4 patch, a single token spans 16&nbsp;&times;&nbsp;4&nbsp;&times;&nbsp;4&nbsp;=&nbsp;256 latent dimensions, and predicting a high-dimensional noised quantity becomes fundamentally hard: clean data lies on a low-dimensional manifold while the velocity/noise target does not, so an under-capacity network struggles to fit it <a href="#ref-jit">[5]</a>.</p>
+<figure>
+  <img class="figure-img" src="assets/x_pred.png" alt="Stage-2 training loss curves: x-pred vs. v-pred and other variants">
+  <figcaption>Stage-2 training loss. x-pred (v0.11, orange) converges dramatically faster than v-pred (v0.10) and every other variant.</figcaption>
+</figure>
+<p>x-prediction converges far faster, and the gap carries over to samples: at this patch size x-pred is visually far stronger than v-pred.</p>
+
+<h3 id="exp-data">Data efficiency</h3>
+<p>How much data does the coarse model need to converge? For context on the base model: it is trained in two phases &mdash; a text-to-video (t2v) pretraining phase, then a text/image/audio-to-video (tia2v) mid-training phase. Both data diversity and volume are larger in pretraining than in mid-training; mid-training uses roughly 40M samples, while the pretraining budget is not known to us. The coarse model reuses the base model's mid-training data.</p>
+<p>Plotting the coarse model's loss against samples seen, it begins to converge after about 1M samples, and generation quality shows no visible improvement beyond about 2M samples. That 2M is roughly 1/20 of the 40M mid-training set &mdash; so the recipe is fairly data-efficient.</p>
+<figure>
+  <img class="figure-img" src="assets/dae_stage2_loss_curves_samples_zoom.png" alt="Stage-2 loss vs. cumulative samples seen">
+  <figcaption>TODO: redraw figure (extend x-axis to ~2M, clean up legend). Coarse-model Stage-2 loss vs. cumulative samples seen: loss flattens after ~1M samples, and generation quality shows no visible gain beyond ~2M.</figcaption>
+</figure>
+
+<h3 id="exp-setup">Setup</h3>
+<p class="muted">TODO: base model, data, patch size / handoff j, schedule, training budget, evaluation protocol.</p>
+
+<h3 id="exp-efficiency">Efficiency</h3>
+<p>We time a single denoising step &mdash; coarse vs. base &mdash; at CP=1. The coarse model runs on 1/4 of the tokens and is <b>~5.17&times; faster per step</b>, above the 4&times; token ratio.</p>
+<table>
+  <tr><th>CP=1, per step</th><th>Coarse</th><th>Base</th><th>Speedup</th></tr>
+  <tr><td>Steady-state latency</td><td>2439&nbsp;ms</td><td>12609&nbsp;ms</td><td>5.17&times;</td></tr>
+  <tr><td>Flash-attention / call</td><td>1.81&nbsp;ms</td><td>27.80&nbsp;ms</td><td>15.4&times;</td></tr>
+  <tr><td>Attention share of step</td><td>20.8%</td><td>36.5%</td><td>&mdash;</td></tr>
+  <tr><td>Linear/FFN share of step</td><td>33.1%</td><td>27.5%</td><td>&mdash;</td></tr>
+</table>
+<p>The super-linear gain comes from attention: it is 36.5% of the base step and runs ~15&times; faster at 1/4 tokens (near the theoretical 16&times;), so cutting that dominant quadratic cost more than offsets the 4&times; token reduction.</p>
+
+<h3 id="exp-exposure">Exposure bias</h3>
+<p>Does the off-policy Stage&nbsp;2 model stay on-trajectory at inference? We take the Stage-2 model, run coarse&ndash;base inference on 95 test-set samples, and at each of the 15 coarse steps measure the MSE between the coarse prediction and the base model's velocity at the same state. The error grows step by step &mdash; from ~0.006 to ~0.02 &mdash; the signature of <b>exposure bias</b>: the coarse model drifts onto states that its data-noised training never covered. This is exactly what motivates the on-policy stage. After on-policy distillation (Stage&nbsp;3), the per-step MSE stays flat at ~0.006 across the whole trajectory.</p>
+<div class="scroll-x">
+<table class="wide-table">
+  <tr><th>MSE vs. base velocity</th><th>1</th><th>2</th><th>3</th><th>4</th><th>5</th><th>6</th><th>7</th><th>8</th><th>9</th><th>10</th><th>11</th><th>12</th><th>13</th><th>14</th><th>15</th></tr>
+  <tr><td>Stage&nbsp;2 (off-policy)</td><td>0.0061</td><td>0.0068</td><td>0.0079</td><td>0.0091</td><td>0.0103</td><td>0.0118</td><td>0.0129</td><td>0.0141</td><td>0.0152</td><td>0.0164</td><td>0.0173</td><td>0.0182</td><td>0.0189</td><td>0.0195</td><td>0.0201</td></tr>
+  <tr><td>+ Stage&nbsp;3 (on-policy)</td><td>0.0059</td><td>0.0061</td><td>0.0058</td><td>0.0062</td><td>0.0060</td><td>0.0057</td><td>0.0063</td><td>0.0059</td><td>0.0061</td><td>0.0060</td><td>0.0058</td><td>0.0062</td><td>0.0060</td><td>0.0059</td><td>0.0061</td></tr>
+</table>
+</div>
+<figcaption>Per-step MSE between the coarse prediction and the base velocity, averaged over 95 test-set samples. Off-policy Stage&nbsp;2 drifts; on-policy Stage&nbsp;3 keeps it flat.</figcaption>
+
+<h3 id="cases">Video comparisons</h3>
+<p class="muted">DAE (left) vs. Baseline (right). Each clip contains both labeled outputs, played together. Click play to watch, unmute to hear audio, or use fullscreen for a closer look.</p>
+<div class="comparison-toolbar">
+  <label for="comparison-language">Language</label>
+  <select id="comparison-language">
+    <option value="all">All</option>
+    <option value="en">English</option>
+    <option value="zh">Chinese</option>
+  </select>
+  <span id="comparison-count" role="status" aria-live="polite"></span>
+</div>
+<div id="case-grid"><!-- populated by script --></div>
+<button class="comparison-more" id="comparison-more" type="button">Load more comparisons</button>
+<noscript><p>Enable JavaScript to browse the comparison videos.</p></noscript>
+
+<h2 id="next">Next steps<a class="anchor" href="#next">[#]</a></h2>
+<p>So far we only cut the <em>per-step</em> cost of the high-noise phase; the coarse model still takes the same number of steps as the base model over that interval. The natural next step is to also cut the <em>number</em> of steps by integrating few-step distillation (DMD) on top of the coarse model.</p>
+<p>This is the same z<sub>j</sub> distribution-matching objective from a different angle: a learned fake score lets the coarse model take large jumps while its z<sub>j</sub> marginal stays on the base model's. Trajectory distillation (Stages&nbsp;2&ndash;3) is a strong, stable warm-start; DMD then compresses the high-noise phase into a handful of steps, compounding with the 1/4-token saving for a further end-to-end speedup.</p>
+
+<h2 id="references">References<a class="anchor" href="#references">[#]</a></h2>
+<p class="refs">
+  <span id="ref-dcae">[1] <a href="https://arxiv.org/abs/2410.10733">Deep Compression Autoencoder for Efficient High-Resolution Diffusion Models.</a> arXiv:2410.10733.</span><br>
+  <span id="ref-pyramidal">[2] <a href="https://arxiv.org/abs/2410.05954">Pyramidal Flow Matching for Efficient Video Generative Modeling.</a> arXiv:2410.05954.</span><br>
+  <span id="ref-latent-forcing">[3] <a href="https://arxiv.org/abs/2602.11401">Latent Forcing: Reordering the Diffusion Trajectory for Pixel-Space Image Generation.</a> arXiv:2602.11401.</span><br>
+  <span id="ref-longcat-video">[4] <a href="https://arxiv.org/abs/2510.22200">LongCat-Video Technical Report.</a> arXiv:2510.22200.</span><br>
+  <span id="ref-jit">[5] <a href="https://arxiv.org/abs/2511.13720">Back to Basics: Let Denoising Generative Models Denoise (JiT).</a> arXiv:2511.13720.</span>
+</p>
+
+<footer>
+  project report &middot; experiments conducted on LPM 1.0 during a research internship &middot; 2026
+</footer>
+
+</article>
+
+<script src="assets/js/main.js" defer></script>
+</body>
+</html>

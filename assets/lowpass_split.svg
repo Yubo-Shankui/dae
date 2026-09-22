@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 520" role="img" aria-labelledby="title desc">
+  <title id="title">Hand-crafted low-pass split</title>
+  <desc id="desc">A schematic frequency-power plot showing a hand-crafted low-pass split. Stage 1 generates low-frequency content, Gaussian noise reintroduces a flat high-frequency floor, and stage 2 refines high-frequency details. The cutoff must be aligned with a denoising timestep j.</desc>
+  <defs>
+    <style>
+      .bg{fill:#121212}.axis{stroke:#ffffff78;stroke-width:1.7}.grid{stroke:#ffffff12;stroke-width:1}.txt{font-family:'Vulf Mono',ui-monospace,monospace;fill:#ffffffe0;font-size:17px}.small{font-family:'Satoshi-Variable',system-ui,sans-serif;fill:#ffffffa8;font-size:15px}.tiny{font-family:'Vulf Mono',ui-monospace,monospace;fill:#ffffff82;font-size:13px}.signal{fill:none;stroke:#f55142;stroke-width:4;stroke-linecap:round}.noise{fill:none;stroke:#6aa5ff;stroke-width:4;stroke-linecap:round}.noisy{fill:none;stroke:#37c878;stroke-width:4.5;stroke-linecap:round}.cut{stroke:#f5ab4a;stroke-width:2.5;stroke-dasharray:8 7}.stage{fill:#ffffff06;stroke:#ffffff16;stroke-width:1}.arrow{stroke:#ffffff99;stroke-width:2.8;fill:none;marker-end:url(#a)}.orange{fill:#f5ab4a}.red{fill:#f55142}.blue{fill:#6aa5ff}.green{fill:#37c878}
+    </style>
+    <marker id="a" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M0,0 L10,5 L0,10 Z" fill="#ffffff99"/></marker>
+  </defs>
+
+  <rect class="bg" width="1000" height="520"/>
+  <text class="txt" x="58" y="54">Hand-crafted low-pass split</text>
+  <text class="small" x="58" y="80">Downsampling chooses a frequency cutoff, then training must align it with a denoising timestep j.</text>
+
+  <!-- plot area -->
+  <rect class="stage" x="100" y="115" width="360" height="300" rx="10"/>
+  <rect class="stage" x="460" y="115" width="430" height="300" rx="10"/>
+
+  <!-- grid lines -->
+  <line class="grid" x1="100" y1="175" x2="890" y2="175"/>
+  <line class="grid" x1="100" y1="250" x2="890" y2="250"/>
+  <line class="grid" x1="100" y1="325" x2="890" y2="325"/>
+  <line class="grid" x1="255" y1="115" x2="255" y2="415"/>
+  <line class="grid" x1="625" y1="115" x2="625" y2="415"/>
+  <line class="grid" x1="800" y1="115" x2="800" y2="415"/>
+
+  <!-- axes -->
+  <line class="axis" x1="100" y1="415" x2="890" y2="415"/>
+  <line class="axis" x1="100" y1="415" x2="100" y2="115"/>
+  <text class="tiny" x="450" y="462">frequency</text>
+  <text class="tiny" transform="translate(48,285) rotate(-90)">power</text>
+
+  <!-- stage labels -->
+  <text class="tiny" x="158" y="135">stage 1: low-frequency content</text>
+  <text class="tiny" x="565" y="135">stage 2: add noise, refine details</text>
+
+  <!-- curves approximate log-log spectra -->
+  <!-- signal power law red -->
+  <path class="signal" d="M130 145 C190 166, 255 195, 315 236 C390 288, 500 336, 625 365 C735 390, 815 405, 870 410"/>
+  <!-- noise flat blue -->
+  <path class="noise" d="M130 242 C280 240, 430 239, 590 238 C720 237, 810 237, 870 237"/>
+  <!-- noised spectrum green = signal above noise then flat -->
+  <path class="noisy" d="M130 145 C190 166, 255 195, 315 226 C362 237, 410 239, 460 239 C590 238, 750 237, 870 237"/>
+
+  <!-- cutoff -->
+  <line class="cut" x1="460" y1="115" x2="460" y2="415"/>
+  <text class="tiny orange" x="410" y="105">low-pass cutoff</text>
+  <text class="tiny orange" x="395" y="436">chosen by downsample ratio</text>
+
+  <!-- legend -->
+  <line class="signal" x1="670" y1="170" x2="720" y2="170"/><text class="tiny" x="732" y="175">clean signal</text>
+  <line class="noise" x1="670" y1="198" x2="720" y2="198"/><text class="tiny" x="732" y="203">Gaussian noise floor</text>
+  <line class="noisy" x1="670" y1="226" x2="720" y2="226"/><text class="tiny" x="732" y="231">noised latent</text>
+
+  <!-- annotations -->
+  <path class="arrow" d="M360 105 C390 92, 425 92, 452 112"/>
+  <text class="tiny" x="268" y="100">manual split</text>
+
+  <path class="arrow" d="M515 455 C600 488, 710 488, 808 432"/>
+  <text class="tiny" x="536" y="493">hard to match this cutoff to the exact timestep j</text>
+
+  <circle cx="460" cy="238" r="5" fill="#f5ab4a"/>
+  <text class="tiny orange" x="477" y="253">j ?</text>
+</svg>

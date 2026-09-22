@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 470" role="img" aria-labelledby="title desc">
+  <title id="title">Stage 1 training-free initialization</title>
+  <desc id="desc">Teacher base model with 2x2 patch size is converted to coarse model with 4x4 patch size. Transformer blocks are copied, patchify is repeat plus scale, and unpatchify is nearest-neighbor replication.</desc>
+  <defs>
+    <style>.bg{fill:#121212}.txt{font-family:'Vulf Mono',ui-monospace,monospace;fill:#ffffffe8;font-size:20px}.small{font-family:'Satoshi-Variable',system-ui,sans-serif;fill:#ffffffa8;font-size:15px}.tiny{font-family:'Vulf Mono',ui-monospace,monospace;fill:#ffffff80;font-size:13px}.box{fill:#1b1b1b;stroke:#ffffff38;stroke-width:1.5}.teacher{fill:#1b1b1b;stroke:#ffffff55}.student{fill:#241b12;stroke:#f5ab4aaa}.copy{stroke:#ffffffaa;stroke-width:3;fill:none;marker-end:url(#a)}.orange{fill:#f5ab4a}.card{fill:#181818;stroke:#ffffff1f;stroke-width:1.1}.mini{fill:#202020;stroke:#ffffff24;stroke-width:1}.miniO{fill:#2a1d10;stroke:#f5ab4a88;stroke-width:1}</style>
+    <marker id="a" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#ffffffaa"/></marker>
+  </defs>
+  <rect class="bg" width="1120" height="470"/>
+  <text class="txt" x="54" y="64">Stage 1 — training-free initialization</text>
+  <text class="small" x="54" y="92">convert the pretrained base model into a 1/4-token coarse model before any training</text>
+
+  <rect class="box teacher" x="64" y="150" width="230" height="224" rx="18"/>
+  <text class="txt" x="92" y="188">base model</text>
+  <text class="tiny" x="92" y="211">patch 2×2 · full tokens</text>
+  <rect class="mini" x="96" y="238" width="166" height="34" rx="7"/><text class="tiny" x="125" y="260">patchify</text>
+  <rect class="mini" x="96" y="282" width="166" height="34" rx="7"/><text class="tiny" x="116" y="304">transformer</text>
+  <rect class="mini" x="96" y="326" width="166" height="34" rx="7"/><text class="tiny" x="114" y="348">unpatchify</text>
+
+  <rect class="box student" x="826" y="150" width="230" height="224" rx="18"/>
+  <text class="txt orange" x="854" y="188">coarse model</text>
+  <text class="tiny" x="854" y="211">patch 4×4 · 1/4 tokens</text>
+  <rect class="miniO" x="858" y="238" width="166" height="34" rx="7"/><text class="tiny" x="886" y="260">patchify</text>
+  <rect class="miniO" x="858" y="282" width="166" height="34" rx="7"/><text class="tiny" x="878" y="304">transformer</text>
+  <rect class="miniO" x="858" y="326" width="166" height="34" rx="7"/><text class="tiny" x="876" y="348">unpatchify</text>
+
+  <rect class="card" x="386" y="126" width="348" height="68" rx="13"/>
+  <text class="txt" x="430" y="157">copy transformer</text>
+  <text class="small" x="431" y="179">all DiT blocks copied verbatim</text>
+  <path class="copy" d="M294 300 C370 282 380 167 386 160"/>
+  <path class="copy" d="M734 160 C764 174 790 220 826 300"/>
+
+  <rect class="card" x="386" y="224" width="348" height="72" rx="13"/>
+  <text class="txt orange" x="420" y="255">patchify: repeat + scale</text>
+  <text class="small" x="421" y="278">preserve activation magnitude</text>
+  <path class="copy" d="M262 255 H378"/>
+  <path class="copy" d="M734 260 H850"/>
+
+  <rect class="card" x="386" y="326" width="348" height="72" rx="13"/>
+  <text class="txt orange" x="407" y="357">unpatchify: NN replicate</text>
+  <text class="small" x="408" y="380">initial output = upsampled teacher</text>
+  <path class="copy" d="M262 343 H378"/>
+  <path class="copy" d="M734 362 H850"/>
+
+  <text class="tiny" x="456" y="431">no data · no optimizer · one converted checkpoint</text>
+</svg>

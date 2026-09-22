@@ -1,0 +1,52 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1120 500" role="img" aria-labelledby="title desc">
+  <title id="title">Stage 2 high-noise trajectory distillation</title>
+  <desc id="desc">Real latent z0 and Gaussian noise produce zt for t greater than j. Frozen base teacher predicts velocity. Coarse student predicts clean latent x hat, converts it to velocity, then matches teacher velocity with weighted MSE. No CFG target, DMD, or rollout.</desc>
+  <defs>
+    <style>.bg{fill:#121212}.txt{font-family:'Vulf Mono',ui-monospace,monospace;fill:#ffffffe8;font-size:20px}.small{font-family:'Satoshi-Variable',system-ui,sans-serif;fill:#ffffffa8;font-size:15px}.tiny{font-family:'Vulf Mono',ui-monospace,monospace;fill:#ffffff80;font-size:13px}.box{fill:#1b1b1b;stroke:#ffffff38;stroke-width:1.4}.orangeBox{fill:#241b12;stroke:#f5ab4aaa;stroke-width:1.8}.teacher{fill:#202020;stroke:#ffffff55;stroke-width:1.6}.loss{fill:#211515;stroke:#f55142aa;stroke-width:1.8}.arrow{stroke:#ffffffaa;stroke-width:3.1;fill:none;marker-end:url(#a)}.arrowO{stroke:#f5ab4a;stroke-width:3.5;fill:none;marker-end:url(#ao)}.arrowR{stroke:#f55142;stroke-width:3.4;fill:none;marker-end:url(#ar)}.orange{fill:#f5ab4a}.red{fill:#f55142}</style>
+    <marker id="a" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#ffffffaa"/></marker>
+    <marker id="ao" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#f5ab4a"/></marker>
+    <marker id="ar" viewBox="0 0 10 10" refX="8.5" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M0,0 L10,5 L0,10 Z" fill="#f55142"/></marker>
+  </defs>
+  <rect class="bg" width="1120" height="500"/>
+  <text class="txt" x="54" y="64">Stage 2 — high-noise trajectory distillation</text>
+  <text class="small" x="54" y="92">pointwise teacher regression on real noised data, restricted to t &gt; j</text>
+
+  <rect class="box" x="66" y="190" width="110" height="68" rx="12"/><text class="txt" x="100" y="230">z₀</text><text class="tiny" x="89" y="250">data</text>
+  <rect class="box" x="66" y="300" width="110" height="68" rx="12"/><text class="txt" x="101" y="340">ε</text><text class="tiny" x="91" y="360">noise</text>
+  <rect class="orangeBox" x="246" y="244" width="126" height="78" rx="13"/><text class="txt orange" x="286" y="286">zₜ</text><text class="tiny" x="275" y="306">t &gt; j</text>
+  <path class="arrowO" d="M176 223 C210 232 218 258 238 270"/>
+  <path class="arrowO" d="M176 333 C210 326 219 304 238 294"/>
+  <text class="tiny orange" x="194" y="201">zₜ=(1−t)z₀+tε</text>
+
+  <rect class="teacher" x="462" y="146" width="192" height="92" rx="15"/>
+  <text class="txt" x="492" y="184">frozen base</text>
+  <text class="tiny" x="501" y="207">teacher · patch 2×2</text>
+  <rect class="orangeBox" x="462" y="312" width="192" height="92" rx="15"/>
+  <text class="txt orange" x="497" y="350">coarse model</text>
+  <text class="tiny" x="501" y="373">student · patch 4×4</text>
+
+  <path class="arrow" d="M372 275 C410 248 424 203 454 192"/>
+  <path class="arrowO" d="M372 292 C413 315 425 348 454 358"/>
+
+  <rect class="box" x="724" y="146" width="128" height="72" rx="12"/>
+  <text class="txt" x="753" y="187">vₜᵉᵃᶜʰ</text>
+  <path class="arrow" d="M654 192 H716"/>
+
+  <rect class="box" x="724" y="300" width="128" height="72" rx="12"/>
+  <text class="txt" x="760" y="342">x̂</text>
+  <text class="tiny" x="753" y="360">x-pred</text>
+  <path class="arrowO" d="M654 358 H716"/>
+
+  <rect class="box" x="894" y="300" width="136" height="72" rx="12"/>
+  <text class="txt" x="925" y="333">vₛ</text>
+  <text class="tiny" x="914" y="354">(zₜ−x̂)/t</text>
+  <path class="arrowO" d="M852 336 H886"/>
+
+  <rect class="loss" x="896" y="162" width="138" height="86" rx="14"/>
+  <text class="txt red" x="923" y="198">loss</text>
+  <text class="tiny" x="912" y="222">λₜ · MSE(vₛ, vₜᵉᵃᶜʰ)</text>
+  <path class="arrowR" d="M852 182 H888"/>
+  <path class="arrowR" d="M962 300 V256"/>
+
+  <text class="tiny" x="442" y="442">no CFG target · no DMD · no rollout · one shared (zₜ, t)</text>
+</svg>
